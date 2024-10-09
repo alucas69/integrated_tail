@@ -515,7 +515,7 @@ EVT_PZC_plot <- function(my_data, alpha_extreme, sub_idx = NULL) {
     xlab('') + ylab('')
   # plot(g2s)
   
-  gg = ggarrange(g1, g1s, g2, g2s, nrow = 2, ncol = 2)
+  gg = ggarrange(g1, g1s, g2, g2s, nrow = 2, ncol = 2, common.legend = TRUE)
   plot(gg)
 }
 

@@ -6,9 +6,9 @@ library(ggpubr)
 library(Rcpp)
 library(RcppArmadillo)
 
-source('PZC_replication_aid.R')
+source('PZC_simulation_aid.R')
 source('Integrated_EVT_filter.R')
-sourceCpp('PZC_replication.cpp')
+sourceCpp('PZC_simulation.cpp')
 sourceCpp('Integrated_EVT_filter.cpp')
 
 
