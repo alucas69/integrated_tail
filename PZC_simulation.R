@@ -105,9 +105,9 @@ my_data = PZC_optimize(my_data, filter = PZC_filter_cpp,
 ###############################################
 ## plot PZC results
 ###############################################
-store_filename = paste0("simulation_LFZ0.csv")
+store_filename = pyaste0("simulation_LFZ0.csv")
 plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME, 
-         # store_filename = store_filename,
+         store_filename = store_filename,
          # sub_frame_idx = 40000:51000, 
          gg_plt_extras = ylim(-20,0),
          make_plot = FALSE)
