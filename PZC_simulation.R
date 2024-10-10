@@ -133,5 +133,19 @@ EVT_PZC_plot(my_data, min(alphas_extreme), sub_idx = 75e3:80e3)
 
 
 
+###############################################
+## subselect figure data in separate dataframe
+###############################################
+# fig_data = subset(
+#   my_data, 
+#   select = c(
+#     'dates', 'y', 'df_inv', 'VaRtrue_alpha0.001', 'ELtrue_alpha0.001', 
+#     'EVT_ft', 'EVT_tau', 'EVT_bandL', 'EVT_bandU', 'EVT_VaR_alpha0.001', 
+#     'EVT_EL_alpha0.001'
+#   )
+# )
+# xin_data$PZC_VaR_alpha0.001 = my_data$VaR0Neld_alpha0.001
+# fig_data$PZC_EL_alpha0.001 = my_data$EL0Neld_alpha0.001
+
 
 
