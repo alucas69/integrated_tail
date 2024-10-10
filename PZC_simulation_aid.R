@@ -79,25 +79,29 @@ get_parameters <- function(theta,
                            diagonal_B = TRUE, 
                            rw_specification = FALSE,
                            reverse = FALSE) {
-  trafo <- function(x) {ee = exp(x); return((ee - 1)/(ee + 1))}
-  itrafo <- function(x) return(log((1 + x)/(1 - x)))
+  trafo_A <- function(x) {ee = exp(x); return(0.1 * (ee - 1)/(ee + 1))}
+  itrafo_A <- function(x) {x = x/0.1; return(log((1 + x)/(1 - x)))}
+  trafo_B <- function(x) {ee = exp(x); return((ee - 1)/(ee + 1))}
+  itrafo_B <- function(x) return(log((1 + x)/(1 - x)))
+  trafo_O <- function(x) {ee = exp(x); return(10 * (ee - 1)/(ee + 1))}
+  itrafo_O <- function(x) {x = x/10; return(log((1 + x)/(1 - x)))}
   if (!reverse) {
     idx = 0
-    omega = theta[ idx + (1:2)]; idx = idx + 2
-    if (diagonal_A) {A_mat = diag(trafo(theta[ idx + (1:2)])); idx = idx + 2} else
-    {A_mat = matrix(trafo(theta[ idx + (1:4)]), ncol = 2); idx = idx + 4}
+    omega = trafo_O(theta[ idx + (1:2)]); idx = idx + 2
+    if (diagonal_A) {A_mat = diag(trafo_A(theta[ idx + (1:2)])); idx = idx + 2} else
+    {A_mat = matrix(trafo_A(theta[ idx + (1:4)]), ncol = 2); idx = idx + 4}
     if (rw_specification) B_mat = diag(2) else {
-      if (diagonal_B) {B_mat = diag(trafo(theta[ idx + (1:2)])); idx = idx + 2} else {
-        B_mat = matrix(trafo(theta[ idx + (1:4)]), ncol = 2); idx = idx + 4}
+      if (diagonal_B) {B_mat = diag(trafo_B(theta[ idx + (1:2)])); idx = idx + 2} else {
+        B_mat = matrix(trafo_B(theta[ idx + (1:4)]), ncol = 2); idx = idx + 4}
     }
     return(list(omega = omega, A_mat = A_mat, B_mat = B_mat))
   } else {
-    theta_out = c(theta$omega)
-    if (diagonal_A) theta_out = c(theta_out, diag(itrafo(theta$A_mat))) else
-      theta_out = c(theta_out, itrafo(theta$A_mat))
+    theta_out = itrafo_O(c(theta$omega))
+    if (diagonal_A) theta_out = c(theta_out, diag(itrafo_A(theta$A_mat))) else
+      theta_out = c(theta_out, itrafo_A(theta$A_mat))
     if (!rw_specification) {
-      if (diagonal_B) theta_out = c(theta_out, diag(itrafo(theta$B_mat))) else
-        theta_out = c(theta_out, itrafo(theta$B_mat))
+      if (diagonal_B) theta_out = c(theta_out, diag(itrafo_B(theta$B_mat))) else
+        theta_out = c(theta_out, itrafo_B(theta$B_mat))
     }
     return(theta_out)
   }
@@ -117,7 +121,7 @@ PZC_initialize_parameters <- function(ydata, alpha, first_pct = 0.1,
                                       diagonal_A, diagonal_B, rw_specification) {
   
   dim_n = length(ydata)
-  y_sub = ydata[1:max(50, 0.1 * dim_n)]; 
+  y_sub = ydata[1:median(dim_n, 250, 0.1 * dim_n)]; 
   f0 = quantile(y_sub, alpha); f0 = c(f0, mean( y_sub[ y_sub <= f0] ))
   B0 = 0.995 * diag(2)
   A0 = 1e-3 * matrix(1, ncol = 2, nrow = 2)
