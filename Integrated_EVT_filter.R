@@ -356,13 +356,13 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
   externaltau = EVT_OPTIONS$EXTERNAL_TAU
   
   dimT = nrow(my_data)
-  par0 = c( 0.0003117466,  5.7797848912, 0.0079226142, 0.0057528009) ## warm for pos/neg alpha parameterization
   cat('\n#########################\n## EVT model optimization\n#########################\n')
   if (verbosity >= 1) cat('\nInitial parameter:\n', unlist(par.trafo.tau(par0)))
   
   ## loop over different smoothness sigmoids
   if (is.null(externaltau)) {
     cat("\n\n... NOW ESTIMATING THE DYNAMIC THRESHOLDS\n")
+    par0 = c( 0.0003117466,  5.7797848912, 0.0079226142, 0.0057528009) ## warm for pos/neg alpha parameterization
     for (steep in smoothings) {
       if (steep < 0) {
         steep = max(smoothings)
