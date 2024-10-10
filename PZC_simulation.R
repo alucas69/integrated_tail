@@ -100,14 +100,16 @@ my_data = generate_data_student_t_v1(dim_n, alphas_extreme,
 ###############################################
 ## estimate PZC specification for extreme alpha
 ###############################################
-my_data = PZC_optimize(my_data, filter = PZC_filter_cpp, 
-                       PZC_OPTIONS = s_PZC_OPTIONS, verbosity = 0)
+PZC_optimizer_outputs = 
+  PZC_optimize(my_data, filter = PZC_filter_cpp, 
+               PZC_OPTIONS = s_PZC_OPTIONS, verbosity = 0)
+my_data = PZC_optimizer_outputs$my_data; PZC_optimizer_outputs$my_data = NULL
 ###############################################
 ## plot PZC results
 ###############################################
-store_filename = pyaste0("simulation_LFZ0.csv")
+store_filename = paste0("simulation_LFZ0.csv")
 plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME, 
-         store_filename = store_filename,
+         # store_filename = store_filename,
          # sub_frame_idx = 40000:51000, 
          gg_plt_extras = ylim(-20,0),
          make_plot = FALSE)
@@ -119,7 +121,7 @@ plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME,
 ###############################################
 ## estimate EVT specification for extreme alpha
 ###############################################
-EVT_optimizer_outputs = EVT_optimize(my_data, EVT_OPTIONS = s_EVT_OPTIONS, verbosity = 0)
+EVT_optimizer_outputs = EVT_optimize(my_data, EVT_OPTIONS = s_EVT_OPTIONS, verbosity = 5)
 my_data = EVT_optimizer_outputs$my_data; EVT_optimizer_outputs$my_data = NULL
 
 
@@ -144,8 +146,8 @@ EVT_PZC_plot(my_data, min(alphas_extreme), sub_idx = 75e3:80e3)
 #     'EVT_EL_alpha0.001'
 #   )
 # )
-# xin_data$PZC_VaR_alpha0.001 = my_data$VaR0Neld_alpha0.001
-# fig_data$PZC_EL_alpha0.001 = my_data$EL0Neld_alpha0.001
+# xin_data$PZC_VaR_alpha0.001 = my_data$PZC_VaR0Neld_alpha0.001
+# fig_data$PZC_EL_alpha0.001 = my_data$PZC_EL0Neld_alpha0.001
 
 
 

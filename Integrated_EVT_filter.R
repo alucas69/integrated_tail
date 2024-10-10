@@ -357,12 +357,12 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
   
   dimT = nrow(my_data)
   cat('\n#########################\n## EVT model optimization\n#########################\n')
-  if (verbosity >= 1) cat('\nInitial parameter:\n', unlist(par.trafo.tau(par0)))
   
   ## loop over different smoothness sigmoids
   if (is.null(externaltau)) {
     cat("\n\n... NOW ESTIMATING THE DYNAMIC THRESHOLDS\n")
     par0 = c( 0.0003117466,  5.7797848912, 0.0079226142, 0.0057528009) ## warm for pos/neg alpha parameterization
+    if (verbosity >= 1) cat('\nInitial parameter:\n', unlist(par.trafo.tau(par0)))
     for (steep in smoothings) {
       if (steep < 0) {
         steep = max(smoothings)
@@ -422,6 +422,7 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
     },
     method = "BFGS", control = my_report
   )
+  if (verbosity >= 1) cat('\nFinal parameters:\n', par.trafo.tailindex(tail.out$par, EVT_OPTIONS))
   
   ## estimate the tail index path and simulated confidence band
   par.t = par.trafo.tailindex(tail.out$par, EVT_OPTIONS)
@@ -459,7 +460,7 @@ EVT_optimize <- function(
     my_data, EVT_OPTIONS, verbosity = 0) {
   
   if (EVT_OPTIONS$USE_PZC) EVT_OPTIONS$EXTERNAL_TAU = 
-      -subset(my_data, select = paste0('VaR0Neld_alpha', EVT_OPTIONS$TAU_TAIL_PCT))[[1]]
+      -subset(my_data, select = paste0('PZC_VaR0Neld_alpha', EVT_OPTIONS$TAU_TAIL_PCT))[[1]]
 
   aid1 = estimate_full_model(my_data, EVT_OPTIONS = EVT_OPTIONS, verbosity = verbosity)
 
@@ -480,7 +481,7 @@ EVT_PZC_plot <- function(my_data, alpha_extreme, sub_idx = NULL) {
   vmy_data = rbind( 
     data.frame(idx = my_data$dates, y = my_data$y, VaRy = my_data[ , paste0("VaRtrue_alpha" , alpha_extreme)], ELy = my_data[ , paste0("ELtrue_alpha" , alpha_extreme)], VaR = 'true', ES = 'true'),
     data.frame(idx = my_data$dates, y = NA,        VaRy = my_data[ , paste0("EVT_VaR_alpha" , alpha_extreme)], ELy = my_data[ , paste0("EVT_EL_alpha" , alpha_extreme)], VaR = 'EVT',  ES = 'EVT'),
-    data.frame(idx = my_data$dates, y = NA,        VaRy = my_data[ , paste0("VaR0Neld_alpha", alpha_extreme)], ELy = my_data[ , paste0("EL0Neld_alpha", alpha_extreme)], VaR = 'PZC',  ES = 'PZC')
+    data.frame(idx = my_data$dates, y = NA,        VaRy = my_data[ , paste0("PZC_VaR0Neld_alpha", alpha_extreme)], ELy = my_data[ , paste0("PZC_EL0Neld_alpha", alpha_extreme)], VaR = 'PZC',  ES = 'PZC')
   )
   vmy_data$VaR = factor(vmy_data$VaR, levels = c('PZC', 'EVT', 'true'), ordered = TRUE)
   vmy_data$ES = factor(vmy_data$ES, levels = c('PZC', 'EVT', 'true'), ordered = TRUE)

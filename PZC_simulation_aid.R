@@ -156,6 +156,7 @@ PZC_optimize <- function(
   diagonal_B = ifelse(is.null(PZC_OPTIONS$diagonal_B), TRUE, PZC_OPTIONS$diagonal_B)
   rw_specification = ifelse(is.null(PZC_OPTIONS$rw_specification), FALSE, PZC_OPTIONS$rw_specification)
   if (is.null(PZC_OPTIONS$ALPHAS_EXTREME)) alphas = 0.05 else alphas = PZC_OPTIONS$ALPHAS_EXTREME
+  all.opt.out = list(); all.opt.count = 1
   
   for (alpha in unique(alphas)) {
     ###############################################
@@ -202,6 +203,7 @@ PZC_optimize <- function(
                       method = "BFGS",
                       control = my_report)
       }
+      a.out$alpha = alpha; a.out$smoothing = smoothing; all.opt.out[[all.opt.count]] = a.out; all.opt.count = all.opt.count + 1;
       theta0 = a.out$par
       p.out = get_parameters(theta0, diagonal_A, diagonal_B, rw_specification = rw_specification)
       if (verbosity >= 1) print(p.out)
@@ -212,12 +214,15 @@ PZC_optimize <- function(
       my_dataframe$VaR = b.out$VaR
       my_dataframe$EL = b.out$EL
       names(my_dataframe)[length(my_dataframe) + (-1:0)] = paste0(
-        c('VaR', 'EL'), max(smoothing, 0), ifelse(smoothing < 0, 'Neld', ''),
+        'PZC_', c('VaR', 'EL'), max(smoothing, 0), ifelse(smoothing < 0, 'Neld', ''),
         '_alpha', alpha)   
     }
   }
   
-  return(my_dataframe)
+  return(list(
+    my_data = my_dataframe,
+    optimizer_output = all.opt.out
+  ))
 }
 
 
@@ -253,10 +258,10 @@ plot_VaR <- function(my_dataframe, alphas, store_filename = NULL, sub_frame_idx 
       function(alpha) {
         out1 = ggplot(data = my_dataframe[sub_frame_idx, ], aes(x = dates)) +
           geom_point(aes(y = y), color = 'gray', fill = 'gray') +
-          geom_line(aes(y = .data[[paste0('VaR0Neld_alpha', alpha)]]), color = 'red') +
-          geom_line(aes(y = .data[[paste0('VaRtrue_alpha', alpha)]]), color = 'black') +
-          geom_line(aes(y = .data[[paste0('ELtrue_alpha', alpha)]]), color = 'green') +
-          geom_line(aes(y = .data[[paste0('EL0Neld_alpha', alpha)]]), color = 'forestgreen')
+          geom_line(aes(y = .data[[paste0('PZC_VaR0Neld_alpha', alpha)]]), color = 'red') +
+          geom_line(aes(y = .data[[paste0('PZC_VaRtrue_alpha', alpha)]]), color = 'black') +
+          geom_line(aes(y = .data[[paste0('PZC_ELtrue_alpha', alpha)]]), color = 'green') +
+          geom_line(aes(y = .data[[paste0('PZC_EL0Neld_alpha', alpha)]]), color = 'forestgreen')
         if (!is.null(gg_plt_extras)) out1 = out1 + gg_plt_extras
         return(out1)
       })
