@@ -75,7 +75,7 @@ generate_data_student_t_v1 <- function(
   if (is.numeric(set_seed)) {cat(paste("\nSimulation seed set to", set_seed)); set.seed(set_seed)}
   ## actual generation
   df_sim_inv  = 1/df_max + 0.5 * (1/df_min - 1/df_max) * (1 - cos(nr_cycles * (1:dim_n) / dim_n * 2 * pi))
-  sigma_sim = rep(1, dim_n)
+  sigma_sim = -(1 + 4 * abs((1:dim_n)/dim_n - 0.5)) / qt(0.05, df = 1 / df_sim_inv) # rep(1, dim_n)
   my_data = data.frame(dates = 1:dim_n, y = rt(dim_n, df = 1/df_sim_inv) * sigma_sim,
                        df_inv = df_sim_inv)
   for (alpha in unique(alphas)) { 
@@ -109,7 +109,7 @@ my_data = PZC_optimizer_outputs$my_data; PZC_optimizer_outputs$my_data = NULL
 ###############################################
 store_filename = paste0("simulation_LFZ0.csv")
 plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME, 
-         # store_filename = store_filename,
+         store_filename = store_filename,
          # sub_frame_idx = 40000:51000, 
          gg_plt_extras = ylim(-20,0),
          make_plot = FALSE)
@@ -121,7 +121,7 @@ plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME,
 ###############################################
 ## estimate EVT specification for extreme alpha
 ###############################################
-EVT_optimizer_outputs = EVT_optimize(my_data, EVT_OPTIONS = s_EVT_OPTIONS, verbosity = 5)
+EVT_optimizer_outputs = EVT_optimize(my_data, EVT_OPTIONS = s_EVT_OPTIONS, verbosity = 0)
 my_data = EVT_optimizer_outputs$my_data; EVT_optimizer_outputs$my_data = NULL
 
 
