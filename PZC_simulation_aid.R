@@ -234,10 +234,47 @@ PZC_optimize <- function(
 
 
 
-plot_VaR <- function(my_dataframe, alphas, store_filename = NULL, sub_frame_idx = NULL,
+plot_VaR <- function(my_dataframe, alphas, sub_frame_idx = NULL,
                      gg_plt_extras = NULL, make_plot = TRUE) {
+  ## plotting
+  if (is.null(sub_frame_idx)) sub_frame_idx = 1:nrow(my_dataframe)
+  gg = lapply(
+    unique(alphas),
+    function(alpha) {
+      out1 = ggplot(data = my_dataframe[sub_frame_idx, ], aes(x = dates)) +
+        geom_point(aes(y = y), color = 'gray', fill = 'gray') +
+        geom_line(aes(y = .data[[paste0('PZC_VaR0Neld_alpha', alpha)]]), color = 'red') +
+        geom_line(aes(y = .data[[paste0('VaRtrue_alpha', alpha)]]), color = 'black') +
+        geom_line(aes(y = .data[[paste0('ELtrue_alpha', alpha)]]), color = 'green') +
+        geom_line(aes(y = .data[[paste0('PZC_EL0Neld_alpha', alpha)]]), color = 'forestgreen')
+      if (!is.null(gg_plt_extras)) out1 = out1 + gg_plt_extras
+      return(out1)
+    })
+  gg = ggarrange(plotlist = gg, nrow = 1)
+  if (make_plot) plot(gg)
+  return(gg)
+}
+
+
+## ------------------------------------------------------
+## ------------------------------------------------------
+
+
+
+
+save_PZC_EVT_frame <- function(
+    my_dataframe, store_filename = NULL, 
+    sub_frame_idx = NULL, select_names = NULL, new_names = NULL) {
   ## saving file
   if (!is.null(store_filename)) {
+    if (is.null(sub_frame_idx)) sub_frame_idx = 1:nrow(my_dataframe)
+    if (is.null(select_names)) select_names = names(my_dataframe)
+    if (is.null(new_names)) new_names = select_names
+    
+    # select the subdataframe and rename variables
+    my_dataframe = my_dataframe[sub_frame_idx, select_names]
+    for (i1 in 1:length(select_names)) names(my_dataframe)[i1] = new_names[i1]
+    
     # store output and make graph
     # do not remove braces
     while (file.exists(store_filename)) {
@@ -248,24 +285,8 @@ plot_VaR <- function(my_dataframe, alphas, store_filename = NULL, sub_frame_idx 
       } else break
     } 
     write.csv(my_dataframe, file = store_filename, row.names = FALSE)
-  }
-  
-  ## plotting
-  if (make_plot) {
-    if (is.null(sub_frame_idx)) sub_frame_idx = 1:nrow(my_dataframe)
-    gg = lapply(
-      unique(alphas),
-      function(alpha) {
-        out1 = ggplot(data = my_dataframe[sub_frame_idx, ], aes(x = dates)) +
-          geom_point(aes(y = y), color = 'gray', fill = 'gray') +
-          geom_line(aes(y = .data[[paste0('PZC_VaR0Neld_alpha', alpha)]]), color = 'red') +
-          geom_line(aes(y = .data[[paste0('PZC_VaRtrue_alpha', alpha)]]), color = 'black') +
-          geom_line(aes(y = .data[[paste0('PZC_ELtrue_alpha', alpha)]]), color = 'green') +
-          geom_line(aes(y = .data[[paste0('PZC_EL0Neld_alpha', alpha)]]), color = 'forestgreen')
-        if (!is.null(gg_plt_extras)) out1 = out1 + gg_plt_extras
-        return(out1)
-      })
-    plot(ggarrange(plotlist = gg, nrow = 1))
+  } else {
+    cat("\n\n*** NO FILENAME PROVIDED IN save_PZC_EVT_frame(), SO NOT STORING ANYHTING ***")
   }
 }
 

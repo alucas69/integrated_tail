@@ -107,10 +107,8 @@ my_data = PZC_optimizer_outputs$my_data; PZC_optimizer_outputs$my_data = NULL
 ###############################################
 ## plot PZC results
 ###############################################
-store_filename = paste0("simulation_LFZ0.csv")
 plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME, 
-         store_filename = store_filename,
-         # sub_frame_idx = 40000:51000, 
+         sub_frame_idx = 75e3:80e3,
          gg_plt_extras = ylim(-20,0),
          make_plot = FALSE)
 
@@ -138,16 +136,24 @@ EVT_PZC_plot(my_data, min(alphas_extreme), sub_idx = 75e3:80e3)
 ###############################################
 ## subselect figure data in separate dataframe
 ###############################################
-# fig_data = subset(
-#   my_data, 
-#   select = c(
-#     'dates', 'y', 'df_inv', 'VaRtrue_alpha0.001', 'ELtrue_alpha0.001', 
-#     'EVT_ft', 'EVT_tau', 'EVT_bandL', 'EVT_bandU', 'EVT_VaR_alpha0.001', 
-#     'EVT_EL_alpha0.001'
-#   )
-# )
-# xin_data$PZC_VaR_alpha0.001 = my_data$PZC_VaR0Neld_alpha0.001
-# fig_data$PZC_EL_alpha0.001 = my_data$PZC_EL0Neld_alpha0.001
+store_filename = paste0("simulation_PZC_EVT.csv")
+save_PZC_EVT_frame(my_data, store_filename = store_filename,
+                   select_names = c(
+                     'dates', 'y', 'df_inv', 'VaRtrue_alpha0.05',
+                     'VaRtrue_alpha0.001', 'ELtrue_alpha0.001', 
+                     'PZC_VaR0Neld_alpha0.001', 'PZC_EL0Neld_alpha0.001', 
+                     'EVT_tau', 
+                     # 'EVT_ft', 'EVT_bandL', 'EVT_bandU', 
+                     'EVT_VaR_alpha0.001', 'EVT_EL_alpha0.001',
+                     NULL),
+                   new_names = c(
+                     'dates', 'y', 'df_inv', 'tau_true',
+                     'VaRtrue_alpha0.001', 'ELtrue_alpha0.001', 
+                     'PZC_VaR_alpha0.001', 'PZC_EL_alpha0.001', 
+                     'EVT_tau', 
+                     # 'EVT_ft', 'EVT_bandL', 'EVT_bandU', 
+                     'EVT_VaR_alpha0.001', 'EVT_EL_alpha0.001',
+                     NULL))
 
 
 
