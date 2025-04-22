@@ -60,7 +60,7 @@ List PZC_filter_cpp(const vec &ydata, const vec &omega, const mat &A_mat,
   // return results
   vec obj_t = LFZ0_obj_cpp(ydata, f_values.col(0), f_values.col(1), alpha, smoothing);
   double obj = mean(obj_t);
-  if (!is_finite(obj_t)) obj_t = 1.0e20;
+  if (!is_finite(obj)) obj = 1.0e20;
   return(List::create(
       Named("obj") = obj,
       _["obj_t"] = obj_t,
