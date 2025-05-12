@@ -466,8 +466,6 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
 
 
 EVT_PZC_plot <- function(my_data, alpha_extreme, sub_idx = NULL) {
-
-  
   ## construct new dataframe for plotting
   dim_n = nrow(my_data)
   my_data = subset(my_data, y <= 0)

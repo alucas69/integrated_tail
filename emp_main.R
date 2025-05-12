@@ -5,10 +5,16 @@ library(ggplot2)
 library(ggpubr)
 library(Rcpp)
 library(RcppArmadillo)
+library(foreach)
+library(doParallel)
+library(doRNG)
+library(optimParallel)
+nr_free_cores = max(1, detectCores() - 1)
+registerDoParallel(cores = nr_free_cores)
 
 source('emp_support.R')
 source('emp_integrated_evt_filter.R')
-source('emp_pzc_simulation_aid.R')
+source('emp_pzc_support.R')
 sourceCpp('PZC_simulation.cpp')
 sourceCpp('Integrated_EVT_filter.cpp')
 
@@ -16,15 +22,15 @@ sourceCpp('Integrated_EVT_filter.cpp')
 #####################################
 ## Select the asset and tail
 #####################################
-asset_nr = 4
+asset_nr = 1
 asset_name = c("EUR", "RUB", "BTC", "ETH")[asset_nr]
 lower_tail = c(F,F,T,T)[asset_nr]
 
-my_sub_frame = list(c("2004-10-01", "2012-12-31"), c("2010-01-01", "2024-12-31"), c("2021-10-01", "2023-01-31"), c("2021-10-01", "2023-01-31"))[[asset_nr]]
-my_frame_limits = list( full_frame_min = c(-3.8,-14,-22,-25), full_frame_max = c(8,43,22,22),
-                        sub_frame_min = c(-3.8, -10, -8, -15), sub_frame_max = c(10,30,15,20))
-my_data_y_min = my_frame_limits[[ifelse(is.null(my_frame_limits), "full_frame_min", "sub_frame_min")]][asset_nr]
-my_data_y_max = my_frame_limits[[ifelse(is.null(my_frame_limits), "full_frame_max", "sub_frame_max")]][asset_nr]
+# my_sub_frame = list(c("2004-10-01", "2012-12-31"), c("2010-01-01", "2024-12-31"), c("2021-10-01", "2023-01-31"), c("2021-10-01", "2023-01-31"))[[asset_nr]]
+my_frame_limits = list( full_frame_min = c(-4.2,-14,-22,-25), full_frame_max = c(6,43,22,22),
+                        sub_frame_min = c(-4.2, -18, -8, -15), sub_frame_max = c(6,30,15,20))
+my_data_y_min = my_frame_limits[[ifelse(!is.null(my_frame_limits), "full_frame_min", "sub_frame_min")]][asset_nr]
+my_data_y_max = my_frame_limits[[ifelse(!is.null(my_frame_limits), "full_frame_max", "sub_frame_max")]][asset_nr]
 
 
 #####################################
@@ -32,7 +38,7 @@ my_data_y_max = my_frame_limits[[ifelse(is.null(my_frame_limits), "full_frame_ma
 ## and extreme tail percentages for
 ## VaR and EL
 #####################################
-alpha_tail = 0.05
+alpha_tail = 0.10
 alphas_extreme = 0.01
 
 
@@ -77,6 +83,9 @@ x0 = my_data$x0
 my_data = my_data$data
 my_data$y = my_data$ret
 
+# mydata = readxl::read_xlsx("input data/estimation_results.xlsx")
+# my_data = subset(mydata, select = c("Return"))
+# my_data$y = my_data$Return
 
 ###############################################
 ## estimate PZC specification for tail alpha
@@ -119,7 +128,7 @@ my_data = PZC_optimize(
 ## plot result
 ###############################################
 my_idx = 1:nrow(my_data)
-if (!is.null(my_sub_frame)) my_idx = which((my_data$date >= my_sub_frame[1]) & (my_data$date <= my_sub_frame[2]))
+# if (!is.null(my_sub_frame)) my_idx = which((my_data$date >= my_sub_frame[1]) & (my_data$date <= my_sub_frame[2]))
 gg_evt = emp_plot_VaR(
   my_data[my_idx, ], # sub_time = grid,
   series_names = c("y", "tau", paste0(c("EVT_VaR_alpha", "EVT_EL_alpha"), alphas_extreme)),
