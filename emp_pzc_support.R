@@ -176,6 +176,16 @@ PZC_optimize <- function(
           rw_specification = PZC_OPTIONS$rw_specification) else theta0 = init_par
     f0 = theta0$f0
     theta0 = theta0$theta0
+    ## add hoc scaling of parameters; might be different for different 
+    ## empirical data and parameter values
+    scaletheta = c(
+      ## omegas
+      1e-3 * c(1,1), 
+      ## A_mat parameters
+      1e-2 * if (diagonal_A) c(1,1) else matrix(1,2,2),
+      ## B_mat parameters
+      if (rw_specification) NULL else 1 * if (diagonal_B) c(1,1) else matrix(1,2,2)
+    )
 
     ## estimate for smoothed indicator function (cascade)
     for (smoothing in smoothings) {
@@ -186,7 +196,7 @@ PZC_optimize <- function(
       cat("\n#######################\n\n")
       
       if (smoothing < 0) {
-        my_report = list(maxit = 2000)
+        my_report = list(maxit = 2000, reltol = 1e-10, parscale = scaletheta)
         if (verbosity >= 2) {my_report$trace = 1; my_report$REPORT = 1}
         a.out = optim(theta0,
                       function(x) {
@@ -196,13 +206,14 @@ PZC_optimize <- function(
                       method = "Nelder-Mead",
                       control = my_report)
       } else { 
-        my_report = list(maxit = 50)
+        my_report = list(maxit = 50, parscale = scaletheta)
         if (verbosity >= 2) {my_report$trace = 1; my_report$REPORT = 1} else {
           if (verbosity >= 1) {my_report$trace = 1; my_report$REPORT = 10}
         }
         a.out = optim(theta0,
                       function(x) {
                         x = get_parameters(x, diagonal_A = diagonal_A, diagonal_B = diagonal_B, rw_specification = rw_specification)
+                        # print(filter(tmp_data, x$omega, x$A_mat, x$B_mat, f0, alpha, smoothing)$obj)
                         return(filter(tmp_data, x$omega, x$A_mat, x$B_mat, f0, alpha, smoothing)$obj)
                       },
                       method = "BFGS",
@@ -212,6 +223,8 @@ PZC_optimize <- function(
       theta0 = a.out$par
       p.out = get_parameters(theta0, diagonal_A, diagonal_B, rw_specification = rw_specification)
       if (verbosity >= 1) print(p.out)
+      print(theta0)
+      print(a.out$value)
       
       ## store VaR and EL for this smoothing
       b.out = filter(tmp_data, p.out$omega, p.out$A_mat, p.out$B_mat, f0, alpha, smoothing)
