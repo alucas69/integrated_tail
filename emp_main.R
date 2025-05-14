@@ -39,7 +39,7 @@ my_data_y_max = my_frame_limits[[ifelse(!is.null(my_frame_limits), "full_frame_m
 ## VaR and EL
 #####################################
 alpha_tail = 0.10
-alphas_extreme = 0.01
+alphas_extreme = 0.005
 
 
 ###############################
@@ -151,8 +151,7 @@ plot(ggarrange(gg_evt, gg_pzc, nrow = 1, ncol = 2))
 ###############################################
 ## backtest
 ###############################################
-aid1 = ifelse(lower_tail, -1, 1)
 print("Backtest")
 print(sprintf("alpha = %2.4f", alphas_extreme))
-print(sprintf("EVT   = %2.4f", mean(aid1 * my_data$y >= aid1 * my_data[ ,  paste0("EVT_VaR_alpha", alphas_extreme)])))
-print(sprintf("PZC   = %2.4f", mean(aid1 * my_data$y >= aid1 * my_data$VaR)))
+aid1 = emp_evaluate_performance(my_data, alpha_extreme, tailindicator = ifelse(lower_tail, -1, 1))
+print(round(aid1, 4))
