@@ -83,9 +83,6 @@ x0 = my_data$x0
 my_data = my_data$data
 my_data$y = my_data$ret
 
-# mydata = readxl::read_xlsx("input data/estimation_results.xlsx")
-# my_data = subset(mydata, select = c("Return"))
-# my_data$y = my_data$Return
 
 ###############################################
 ## estimate PZC specification for tail alpha
