@@ -258,7 +258,7 @@ compute_std_err <- function(x, POTdata, f1, EVT_OPTIONS) {
 
 ## simulate_filter_bands() computes bands around filter reflecting estimation uncertainty
 ## 
-simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct = 0.5, raw = TRUE, returnsims = FALSE, EVT_OPTIONS) {
+simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct = 0.5, raw = TRUE, returnsims = FALSE, EVT_OPTIONS, verbosity = 0) {
   ## initialize
   if (raw) Lt = eigen(covmatrix$sandwich.raw, TRUE) else {
     Lt = eigen(covmatrix$sandwich, TRUE)
@@ -271,14 +271,17 @@ simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct =
   bands = matrix(0, nrow = dimT, ncol = 2)
   
   ## run simulations
-  lifesign = progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
-                              total = nrsims,
-                              complete = "=",   # Completion bar character
-                              incomplete = "-", # Incomplete bar character
-                              current = ">",    # Current bar character
-                              clear = FALSE,    # If TRUE, clears the bar when finish
-                              width = 100) 
-  i1 = 1; skipped = 0; cat('\nSimulating band: '); while (i1 <= nrsims) {
+  if (verbosity > 0) lifesign = 
+    progress_bar$new(format = "(:spin) [:bar] :percent [Elapsed time: :elapsedfull || Estimated time remaining: :eta]",
+                     total = nrsims,
+                     complete = "=",   # Completion bar character
+                     incomplete = "-", # Incomplete bar character
+                     current = ">",    # Current bar character
+                     clear = FALSE,    # If TRUE, clears the bar when finish
+                     width = 100) 
+  i1 = 1; skipped = 0; 
+  if (verbosity > 0) cat('\nSimulating band: ')
+  while (i1 <= nrsims) {
     if (raw) par_in = par.trafo.tailindex(x + rnorm(dimk) %*% Lt, EVT_OPTIONS) else {
       par_in = x + rnorm(dimk) %*% Lt
       if (EVT_OPTIONS$FIXED_OMEGA) {
@@ -293,12 +296,12 @@ simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct =
     if ((par_in['alpha'] > 0) & (par_in['omega'] > 0)) {
       paths[ , i1] = tail.filter(POTdata, par_in['omega'], par_in['beta'], par_in['alpha'], f1)$f_out
       i1 = i1 + 1
-      lifesign$tick()
+      if (verbosity > 0) lifesign$tick()
     } else {
       skipped = skipped + c(par_in['omega'] <= 0, par_in['alpha'] <= 0)
     }
   }
-  cat('\nDiscarded (omega,alpha) = (', paste0(round(100 * skipped / nrsims), collapse = ' % , '), '%) band simulations\n')
+  if (verbosity > 0) cat('\nDiscarded (omega,alpha) = (', paste0(round(100 * skipped / nrsims), collapse = ' % , '), '%) band simulations\n')
   
   ## compute bands
   for (i1 in sequence(dimT)) bands[i1, ] = quantile(paths[i1, ], probs = c((1 - pct)/2, 1 - (1 - pct) / 2), na.rm = TRUE)
@@ -325,6 +328,7 @@ simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct =
 ## my_data: dataframe()
 ##    $y: ydata: vector of raw data
 ##    $dates: vector of corresponding dates
+##    $EVT_tau: vector of tau (POT thresholds)
 ## kappa: upper tail probability for the thresholds for the POTs
 ## pct: confidence level for the simulated bands for the tail index filter
 ## nrsims: number of simulations for the confidence bands
@@ -334,6 +338,8 @@ simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct =
 ##      $FIXED_OMEGA: if TRUE, do not estimate omega
 ##      $FIXED_OMEGA_VALUE: value of omega if $FIXED_OMEGA == TRUE
 ## verbosity: integer 0..5, higher for more intermediate output;
+## in_sample_idx: a vector of rows of my_data$y that is used for estimation
+## out_of_sample_idx: a vector of rows of my_data$y that is used for evaluation of the filter, VaR, and ES. The out_of_sample_idx may also fully contain the in_sample_idx (plus extra observations)
 ##
 ## OUTPUT:
 ## =======
@@ -345,69 +351,47 @@ simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct =
 ##    $covmatrices: list of covariance matrices for the tail index model (.raw for the untransformed parameters, otherwise for the omega and alpha)
 estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
                                 EVT_OPTIONS = list(),
-                                verbosity = 0) {
+                                verbosity = 0,    
+                                in_sample_idx = NULL,
+                                out_of_sample_idx = NULL
+) {
   ## initialize
   pct = ifelse(is.null(EVT_OPTIONS$BANDS_PCT), 0.8, EVT_OPTIONS$BANDS_PCT)
   nrsims = ifelse(is.null(EVT_OPTIONS$BANDS_NRSIMS), 100, EVT_OPTIONS$BANDS_NRSIMS)
   raw.sim = ifelse(is.null(EVT_OPTIONS$BANDS_RAW), FALSE, EVT_OPTIONS$BANDS_RAW)
-  if (is.null(EVT_OPTIONS$TAU_TAIL_PCT)) {kappa = 0.05; EVT_OPTIONS$TAU_TAIL_PCT = kappa} else {kappa = EVT_OPTIONS$TAU_TAIL_PCT}
   if (is.null(EVT_OPTIONS$FIXED_OMEGA)) EVT_OPTIONS$FIXED_OMEGA = FALSE
   if (is.null(EVT_OPTIONS$FIXED_OMEGA_VALUE)) EVT_OPTIONS$FIXED_OMEGA_VALUE = 0
-  externaltau = EVT_OPTIONS$EXTERNAL_TAU
-  
-  dimT = nrow(my_data)
-  cat('\n#########################\n## EVT model optimization\n#########################\n')
-  
-  ## loop over different smoothness sigmoids
-  if (is.null(externaltau)) {
-    cat("\n\n... NOW ESTIMATING THE DYNAMIC THRESHOLDS\n")
-    par0 = c( 0.0003117466,  5.7797848912, 0.0079226142, 0.0057528009) ## warm for pos/neg alpha parameterization
-    if (verbosity >= 1) cat('\nInitial parameter:\n', unlist(par.trafo.tau(par0)))
-    for (steep in smoothings) {
-      if (steep < 0) {
-        steep = max(smoothings)
-        sharp = TRUE
-        my_report = list(maxit = 2000)
-        if (verbosity >= 4) {my_report$trace = 1; my_report$REPORT = 1}
-        o.out = optim(
-          par0, function(x) {return(local.tau.filter(my_data$y, x, kappa = kappa, sharp = TRUE))},
-          method = "Nelder-Mead", control = my_report)
-        steep = "indicator"
-      } else {
-        my_report = list(maxit = 500)
-        if (verbosity >= 4) {my_report$trace = 1; my_report$REPORT = 1} else {
-          if (verbosity >= 3) {my_report$trace = 1; my_report$REPORT = 10}}
-        o.out = optim(
-          par0, function(x) {return(local.tau.filter(my_data$y, x, kappa = kappa, sharp = FALSE, steep = steep))},
-          method = "BFGS", control = my_report)
-      }
-      if (verbosity >= 2) cat('\nEVT tau parameters output for smoothing = ', steep, '\n', o.out$par,
-                              '\n', unlist(par.trafo.tau(o.out$par)))
-      z.out = local.tau.filter(my_data$y, o.out$par, kappa = kappa, givemore = TRUE)
-      if (steep == smoothings[1]) tau.path = z.out$path else tau.path = cbind(tau.path, z.out$path)
 
-      par0 = o.out$par
-    }
-    tau.path = tau.path[ , length(smoothings)]
-  } else tau.path = externaltau
-  my_data$EVT_tau = tau.path
+  dimT = nrow(my_data)
+  if (verbosity > 0) cat('\n#########################\n## EVT model optimization\n#########################\n')
   
+
   # ## ensure positive lower bound on tau.t
   tau_eps = 1e-2
-  if (min(tau.path) < tau_eps) {
-    cat('\n\nTrimming ', length(which(tau.path < tau_eps)), 'observations due to too low tau\n')
-    tau.path[which(tau.path < tau_eps)] = tau_eps
+  union_indices = union(in_sample_idx, out_of_sample_idx)
+  if (min(my_data$EVT_tau[union_indices]) < tau_eps) {
+    if (verbosity > 0) cat('\n\nTrimming ', length(which(my_data$EVT_tau[union_indices] < tau_eps)), 'observations due to too low tau\n')
+    my_data$EVT_tau[union_indices] = pmax(my_data$EVT_tau, tau_eps)
   }
   
   ## now estimate the time varying tail index model
-  cat("\n... NOW ESTIMATING THE TAIL INDEX")
-  POTdates_idx = cumsum(as.integer(my_data$y > tau.path)); POTdates_idx[ which(POTdates_idx < 1) ] = 1
-  POTidx = which(my_data$y > tau.path)
-  POTdata = (my_data$y/tau.path - 1)[POTidx]
+  if (verbosity > 0) cat("\n... NOW ESTIMATING THE TAIL INDEX")
+  POTdates_idx = cumsum(as.integer(my_data$y > my_data$EVT_tau))
+  POTdates_idx[ which(POTdates_idx < 1) ] = 1
+  POTdates_idx_is = POTdates_idx[in_sample_idx]
+  POTdates_idx_oos = POTdates_idx[out_of_sample_idx]
+  POTidx = which(my_data$y > my_data$EVT_tau)
+  POTidx_is = which(my_data$y[in_sample_idx] > my_data$EVT_tau[in_sample_idx])
+  POTidx_oos = which(my_data$y[out_of_sample_idx] > my_data$EVT_tau[out_of_sample_idx])
+  POTdata = (my_data$y/my_data$EVT_tau - 1)[POTidx]
+  POTdata_is = (my_data$y/my_data$EVT_tau - 1)[POTidx_is]
+  POTdata_oos = (my_data$y/my_data$EVT_tau - 1)[POTidx_oos]
   POTdates = my_data$x[POTidx]
+  POTdates_is = my_data$x[POTidx_is]
+  POTdates_oos = my_data$x[POTidx_oos]
   par0 = c(-2) ## transformed alpha and omega
   if (!EVT_OPTIONS$FIXED_OMEGA) par0 = c(par0, -4)
-  f1.quick = mean(log(1+POTdata[1:50]))
+  f1.quick = mean(log(1+POTdata_is[1:50]))
   
   my_report = list(maxit = 1000, reltol = 1e-10)
   if (verbosity >= 2) {my_report$trace = 1; my_report$REPORT = 1} else {
@@ -417,8 +401,8 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
     function(x) {
       par_in = par.trafo.tailindex(x, EVT_OPTIONS)
       f1 = f1.quick
-      tmp = tail.filter(POTdata, par_in['omega'], par_in['beta'], par_in['alpha'], f1)$llik
-      return(tmp / length(POTdata))
+      tmp = tail.filter(POTdata_is, par_in['omega'], par_in['beta'], par_in['alpha'], f1)$llik
+      return(tmp / length(POTdata_is))
     },
     method = "BFGS", control = my_report
   )
@@ -427,21 +411,18 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
   ## estimate the tail index path and simulated confidence band
   par.t = par.trafo.tailindex(tail.out$par, EVT_OPTIONS)
   omega = par.t['omega']; alpha = par.t['alpha']
-  tail.index = tail.filter(POTdata, omega, 1, alpha, f1.quick)
-  covmatrices = compute_std_err(tail.out$par, POTdata, f1.quick, EVT_OPTIONS)
-  simulations = simulate_filter_bands(tail.out$par, POTdata, covmatrices, f1.quick, nrsims = nrsims, pct = pct, raw = raw.sim, EVT_OPTIONS = EVT_OPTIONS)
+  tail.index = tail.filter(POTdata_oos, omega, 1, alpha, f1.quick)
+  covmatrices = compute_std_err(tail.out$par, POTdata_is, f1.quick, EVT_OPTIONS)
+  simulations = simulate_filter_bands(tail.out$par, POTdata_oos, covmatrices, f1.quick, nrsims = nrsims, pct = pct, raw = raw.sim, EVT_OPTIONS = EVT_OPTIONS, verbosity = verbosity)
 
-  my_data$EVT_ft = tail.index$f_out[POTdates_idx]
-  my_data$EVT_bandL = simulations$bands[POTdates_idx, 1]
-  my_data$EVT_bandU = simulations$bands[POTdates_idx, 2]
+  my_data[out_of_sample_idx, "EVT_ft"] = tail.index$f_out[POTdates_idx_oos]
+  my_data[out_of_sample_idx, "EVT_bandL"] = simulations$bands[POTdates_idx_oos, 1]
+  my_data[out_of_sample_idx, "EVT_bandU"] = simulations$bands[POTdates_idx_oos, 2]
   ## compute our VaR and EL and the true VaR
-  for (alpha in EVT_OPTIONS$ALPHAS_EXTREME) {
-    my_data$EVT_VaR_alpha = -my_data$EVT_tau * ( (alpha / EVT_OPTIONS$TAU_TAIL_PCT) ^ -my_data$EVT_ft)
-    my_data$EVT_EL_alpha = my_data$EVT_VaR_alpha / (1 - my_data$EVT_ft)
-    my_data$EVT_EL_alpha[ which( my_data$EVT_ft >= 1) ] = NA  ## remove non-existent EL
-    names(my_data)[(-1:0) + length(my_data)] = paste0(names(my_data)[(-1:0) + length(my_data)], alpha)
-  }
-  
+  my_data[out_of_sample_idx, "EVT_VaR"] = my_data$EVT_tau[out_of_sample_idx] * ( (EVT_OPTIONS$ALPHA_EXTREME / EVT_OPTIONS$TAU_TAIL_PCT) ^ -my_data$EVT_ft[out_of_sample_idx])
+  my_data[out_of_sample_idx, "EVT_ES"] = my_data$EVT_VaR[out_of_sample_idx] / (1 - my_data$EVT_ft[out_of_sample_idx])
+  my_data[which( my_data$EVT_ft[out_of_sample_idx] >= 1), "EVT_ES"] = NA  ## remove non-existent ES
+
   if (!exists('o.out')) o.out = NULL
   return(list(
     my_data = my_data,
@@ -457,16 +438,39 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
 
 
 EVT_optimize <- function(
-    my_data, EVT_OPTIONS, verbosity = 0) {
+    my_data, EVT_OPTIONS, 
+    PZC_OPTIONS = NULL,
+    verbosity = 0,
+    in_sample_idx = NULL,
+    out_of_sample_idx = NULL
+) {
   
-  if (EVT_OPTIONS$USE_PZC) EVT_OPTIONS$EXTERNAL_TAU = 
-      -subset(my_data, select = paste0('PZC_VaR0Neld_alpha', EVT_OPTIONS$TAU_TAIL_PCT))[[1]]
+  ## check in and out of sample indices
+  if (is.null(in_sample_idx)) in_sample_idx = 1:nrow(my_data)
+  if (is.null(out_of_sample_idx)) out_of_sample_idx = in_sample_idx
+  if (min(in_sample_idx) < 1) error("EVT_optimize(): in-sample starts before obs #1")
+  if (min(out_of_sample_idx) < 1) error("EVT_optimize(): out-of-sample starts before obs #1")
+  if (max(in_sample_idx) > nrow(my_data)) error("EVT_optimize(): in-sample ends after data ends")
+  if (max(out_of_sample_idx) > nrow(my_data)) error("EVT_optimize(): out-of-sample ends after data ends")
 
-  aid1 = estimate_full_model(my_data, EVT_OPTIONS = EVT_OPTIONS, verbosity = verbosity)
+  if (is.null(EVT_OPTIONS$EXTERNAL_TAU)) {
+    ## estimate tau using PZC
+    ## make sure that out_of_sample_idx encompasses or tightly follows in_sample_idx
+    all_idx = sort(union(in_sample_idx, out_of_sample_idx))
+    PZC_OPTIONS$ALPHA_EXTREME = EVT_OPTIONS$TAU_TAIL_PCT
+    PZC_optimizer_outputs = 
+      PZC_optimize(my_data, filter = PZC_filter_cpp, 
+                   PZC_OPTIONS = PZC_OPTIONS, verbosity = 0,
+                   in_sample_idx = in_sample_idx,
+                   out_of_sample_idx = out_of_sample_idx)
+    my_data$EVT_tau = PZC_optimizer_outputs$my_data$PZC_VaR; PZC_optimizer_outputs$my_data = NULL
+  } else my_data$EVT_tau = EVT_OPTIONS$EXTERNAL_TAU
+
+  aid1 = estimate_full_model(my_data, EVT_OPTIONS = EVT_OPTIONS, verbosity = verbosity,
+                             in_sample_idx = in_sample_idx, out_of_sample_idx = out_of_sample_idx)
 
   return(aid1)
 }
-
 
 
 

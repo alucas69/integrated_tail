@@ -5,6 +5,7 @@ library(ggplot2)
 library(ggpubr)
 library(Rcpp)
 library(RcppArmadillo)
+library(forecast)
 
 source('PZC_simulation_aid.R')
 source('Integrated_EVT_filter.R')
@@ -17,9 +18,11 @@ sourceCpp('Integrated_EVT_filter.cpp')
 ## and extreme tail percentages for
 ## VaR and EL
 #####################################
-alpha_tail = 0.05
-alphas_extreme = c(0.05, 1e-3)
-
+# alpha_tail = 0.05
+# alphas_extreme = c(0.05, 1e-3)
+alpha_tail = 0.025
+alphas_extreme = c(0.025, 2.5e-3)
+asset_name = "simulation"
 
 ###############################
 ## set model configurations PZC
@@ -31,7 +34,7 @@ s_PZC_OPTIONS = list(
   diagonal_B = TRUE,         # boolean; TRUE: use diagonal B matrix 
   ALPHAS_EXTREME = alphas_extreme,  # double, tail percentage for the thresholds tau
   rw_specification = FALSE,  # boolean; TRUE: use unit B matrix; overrides diagonal_B
-  set_seed = 1234            # NULL or integer: if NULL, do not set the seed when generating data
+  set_seed = NULL            # NULL or integer: if NULL, do not set the seed when generating data
 )
 
 ###############################
@@ -44,7 +47,7 @@ s_EVT_OPTIONS = list(
   BANDS_RAW = FALSE,         # logical, if FALSE base confidence bands on (omega, alpha),
                              #          otherwise base bands on free (theta1, theta2)
                              #          parameters and transform to (omega, alpha)
-  BANDS_NRSIMS = 1000,       # integer, number of simulations for the confidence bands
+  BANDS_NRSIMS = 100,       # integer, number of simulations for the confidence bands
   BANDS_PCT = 0.75,          # double, confidence level for the confidence bands
   TAU_TAIL_PCT = alpha_tail, # double, tail percentage for the thresholds tau
   ALPHAS_EXTREME = alphas_extreme,  # double, tail percentage for the thresholds tau
@@ -61,7 +64,7 @@ s_EVT_OPTIONS = list(
 #######################################################
 ## STUDENT T WITH SCALE 1 AND TV NU
 generate_data_student_t_v1 <- function(
-    dim_n, alphas, df_min = 2.5, df_max = 10, nr_cycles = 3, 
+    dim_n, alphas, df_min = 2.5, df_max = 10, nr_nu_cycles = 1, nr_sigma_cycles = 1,
     set_seed = NULL) {
 
   VaRtrue = function(sigma, df_inv, alpha) {
@@ -74,8 +77,8 @@ generate_data_student_t_v1 <- function(
   }
   if (is.numeric(set_seed)) {cat(paste("\nSimulation seed set to", set_seed)); set.seed(set_seed)}
   ## actual generation
-  df_sim_inv  = 1/df_max + 0.5 * (1/df_min - 1/df_max) * (1 - cos(nr_cycles * (1:dim_n) / dim_n * 2 * pi))
-  sigma_sim = -(1 + 4 * abs((1:dim_n)/dim_n - 0.5)) / qt(0.05, df = 1 / df_sim_inv) # rep(1, dim_n)
+  df_sim_inv  = 1/df_max + 0.5 * (1/df_min - 1/df_max) * (1 - cos(nr_nu_cycles * (1:dim_n) / dim_n * 2 * pi))
+  sigma_sim = -(1 + 4 * abs(((1:dim_n) %% (dim_n/nr_sigma_cycles))/(dim_n/nr_sigma_cycles) - 0.5)) / qt(0.05, df = 1 / df_sim_inv) # rep(1, dim_n)
   my_data = data.frame(dates = 1:dim_n, y = rt(dim_n, df = 1/df_sim_inv) * sigma_sim,
                        df_inv = df_sim_inv)
   for (alpha in unique(alphas)) { 
@@ -91,26 +94,77 @@ generate_data_student_t_v1 <- function(
 ################
 ## Generate data
 ################
-dim_n = 200000
+dim_n = 40000
+sub_frame = round(dim_n * c(0.75, 0.8))
 my_data = generate_data_student_t_v1(dim_n, alphas_extreme, 
-                                     nr_cycles = 3,
+                                     nr_nu_cycles = 3,
+                                     nr_sigma_cycles = 1,
                                      set_seed = s_PZC_OPTIONS$set_seed)
+#############################
+## Replace by empirical data
+#############################
+# ## EURUSD
+# my_data2 = readxl::read_xlsx('../../Data/updated data/EURUSD.xlsx'); my_data2 = subset(my_data2, Date > "1999-01-01")
+# # my_data2 = readxl::read_xlsx('../../Data/updated data/USDRUB.xlsx'); my_data2 = subset(my_data2, Date > "1999-01-01")
+# names(my_data2)[2] = 'close'
+# my_data2$Return = c(NA, 100 * diff(log(my_data2$close)))
+# my_data2 = my_data2[complete.cases(my_data2), ]
+# my_data = data.frame(
+#   dates = 1:nrow(my_data2), y = my_data2$Return, df_inv = 0.1,
+#   VaRtrue_alpha0.1 = 0, ELtrue_alpha0.1 = 0,
+#   VaRtrue_alpha0.01 = 0, ELtrue_alpha0.01 = 0
+# )
+# dim_n = nrow(my_data); sub_frame = round(dim_n * c(0.75, 0.8))
+# zz = 1; alpha_tail = 0.1 / zz; alphas_extreme = c(alpha_tail, alpha_tail / 10)
+# s_PZC_OPTIONS$ALPHAS_EXTREME = alphas_extreme; s_EVT_OPTIONS$TAU_TAIL_PCT = alpha_tail; s_EVT_OPTIONS$ALPHAS_EXTREME = alphas_extreme
+# names(my_data) = c('dates', 'y', 'df_inv', paste0('VaRtrue_alpha', alphas_extreme), paste0('ELtrue_alpha', alphas_extreme))
+## BTCUSD
+my_data2 = read.csv('../../Data/updated data/Bitfinex_BTCUSD_1h.csv')
+# my_data2 = read.csv('../../Data/updated data/Bitfinex_ETHUSD_1h.csv')
+my_data2 = my_data2[nrow(my_data2):1, ]
+my_data2$Return = c(NA, -100 * diff(log(my_data2$close)))
+my_data2 = my_data2[complete.cases(my_data2), ]
+my_data = data.frame(
+  dates = 1:nrow(my_data2), y = -my_data2$Return, df_inv = 0.1,
+  VaRtrue_alpha0.025 = 0, ELtrue_alpha0.025 = 0, VaRtrue_alpha0.0025 = 0, ELtrue_alpha0.0025 = 0
+)
+dim_n = nrow(my_data); sub_frame = round(dim_n * c(0.75, 0.8))
+zz = 4; alpha_tail = 0.1 / zz; alphas_extreme = c(alpha_tail, alpha_tail / 10)
+s_PZC_OPTIONS$ALPHAS_EXTREME = alphas_extreme; s_EVT_OPTIONS$TAU_TAIL_PCT = alpha_tail; s_EVT_OPTIONS$ALPHAS_EXTREME = alphas_extreme
+names(my_data) = c('dates', 'y', 'df_inv', paste0('VaRtrue_alpha', alphas_extreme), paste0('ELtrue_alpha', alphas_extreme))
+
 
 
 ###############################################
 ## estimate PZC specification for extreme alpha
 ###############################################
+in_sample_idx = 1:(nrow(my_data) - 10000)
+out_of_sample_idx = 1:nrow(my_data)
 PZC_optimizer_outputs = 
   PZC_optimize(my_data, filter = PZC_filter_cpp, 
-               PZC_OPTIONS = s_PZC_OPTIONS, verbosity = 0)
+               PZC_OPTIONS = s_PZC_OPTIONS, verbosity = 0,
+               in_sample_idx = in_sample_idx,
+               out_of_sample_idx = out_of_sample_idx)
 my_data = PZC_optimizer_outputs$my_data; PZC_optimizer_outputs$my_data = NULL
+
+
+# # ## extra plots for empirical data
+# ytmp = cbind(my_data_test[ , paste0('VaRtrue_alpha', alphas_extreme[1])],
+#              my_data_test[ , paste0('PZC_VaR0Neld_alpha', alphas_extreme[1])])[out_of_sample_idx, ]
+# plot(ytmp[ , 1], type = "l", ylim = range(ytmp)); lines(ytmp[ , 2], col = "red")
+# ytmp = cbind(my_data_test[ , paste0('VaRtrue_alpha', alphas_extreme[2])],
+#              my_data_test[ , paste0('PZC_VaR0Neld_alpha', alphas_extreme[2])])[out_of_sample_idx, ]
+# plot(ytmp[ , 1], type = "l", ylim = range(ytmp)); lines(ytmp[ , 2], col = "red")
+# stop(0)
+
+
 ###############################################
 ## plot PZC results
 ###############################################
-plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME, 
-         sub_frame_idx = 75e3:80e3,
-         gg_plt_extras = ylim(-20,0),
-         make_plot = FALSE)
+# plot_VaR(my_data, alphas = s_PZC_OPTIONS$ALPHAS_EXTREME, 
+#          sub_frame_idx = sub_frame,
+#          gg_plt_extras = ylim(-20,0),
+#          make_plot = FALSE)
 
 
 
@@ -124,72 +178,46 @@ my_data = EVT_optimizer_outputs$my_data; EVT_optimizer_outputs$my_data = NULL
 
 
 
-
+stop(0)
 
 ###############################################
 ## plot result
 ###############################################
-EVT_PZC_plot(my_data, min(alphas_extreme), sub_idx = 75e3:80e3)
+sub_frame = sub_frame[1]:sub_frame[2]
+# EVT_PZC_plot(my_data, min(alphas_extreme), sub_idx = sub_frame)
 
 
 ###############################################
 ## print the result
 ###############################################
-print("MSE Results")
-NZ_MSE = function(x, r1, r2, r1true, r2true, idx = NULL, alpha, scale = 1e3) {
-  # for alpha close to 1 and right tail VaR !!
-  if (is.null(idx)) idx = 1:length(x)
-  ee = data.frame(
-    MAE_VaR = abs(r1 - r1true),
-    MSE_VaR = (r1 - r1true)^2,
-    NZ_2.19 = scale * ( (1 - alpha) * r1 + ifelse(x > r1, x - r1, 0) ),
-    NZ_2.20 = scale * ( (1 - alpha) * log(r1) + ifelse(x > r1, log(x/r1), 0) ),
-    MAE_ES = abs(r2 - r2true),
-    MSE_ES = (r2 - r2true)^2,
-    NZ_2.23 = scale * ( (x > r1) * 0.5 * (x - r1) / sqrt(r2) + (1 - alpha) * 0.5 * (r1 + r2) / sqrt(r2) ),
-    NZ_2.24 = scale * ( (x > r1) * (x - r1) / r2 + (1 - alpha) * (r1 / r2 - 1 + log(r2)) )
-  )
-  return(ee)
-}
-out1 = NZ_MSE(-my_data$y, 
-              -my_data$EVT_VaR_alpha0.001, -my_data$EVT_EL_alpha0.001,
-              -my_data$VaRtrue_alpha0.001, -my_data$ELtrue_alpha0.001, 
-              idx = NULL, 1 - min(alphas_extreme))
-out2 = NZ_MSE(-my_data$y, 
-              -my_data$PZC_VaR0Neld_alpha0.001, -my_data$PZC_EL0Neld_alpha0.001,
-              -my_data$VaRtrue_alpha0.001, -my_data$ELtrue_alpha0.001, 
-              idx = NULL, 1 - min(alphas_extreme))
-out_tab = rbind( colMeans(out1), colMeans(out2) )
-out_tab = rbind(out_tab, out_tab)
-for (i1 in 1:ncol(out_tab)) {
-  aid1 = t.test(out1[ , i1] - out2[ , i1])
-  out_tab[3, i1] = aid1$statistic
-  out_tab[4, i1] = aid1$p.value
-}
-rownames(out_tab) = c('EVT', 'PZC', 'DM', 'DM pval')
+print(paste0(asset_name, "MSE Results (tau alpha = ", alpha_tail, ")"))
+out_tab = NZ_table(-my_data, data_name = "y", evaluation_idx = out_of_sample_idx,
+                   VaR_names = c(paste0('EVT_VaR_alpha', min(alphas_extreme)), paste0('PZC_VaR0Neld_alpha', min(alphas_extreme))),
+                   ES_names = c(paste0('EVT_EL_alpha', min(alphas_extreme)), paste0('PZC_EL0Neld_alpha', min(alphas_extreme))),
+                   alphas = 1 - min(alphas_extreme), method_names = c("EVT", "PZC"))
 print(round(out_tab,3))
-
+stop(0)
 
 
 ###############################################
 ## subselect figure data in separate dataframe
 ###############################################
-store_filename = paste0("simulation_PZC_EVT_200k.csv")
-save_PZC_EVT_frame(my_data, store_filename = store_filename,
-                   select_names = c(
-                     'dates', 'y', 'df_inv', 'VaRtrue_alpha0.05',
-                     'VaRtrue_alpha0.001', 'ELtrue_alpha0.001',
-                     'PZC_VaR0Neld_alpha0.001', 'PZC_EL0Neld_alpha0.001',
-                     'EVT_tau',
-                     # 'EVT_ft', 'EVT_bandL', 'EVT_bandU',
-                     'EVT_VaR_alpha0.001', 'EVT_EL_alpha0.001',
-                     NULL),
-                   new_names = c(
-                     'dates', 'y', 'df_inv', 'tau_true',
-                     'VaRtrue_alpha0.001', 'ELtrue_alpha0.001',
-                     'PZC_VaR_alpha0.001', 'PZC_EL_alpha0.001',
-                     'EVT_tau',
-                     # 'EVT_ft', 'EVT_bandL', 'EVT_bandU',
-                     'EVT_VaR_alpha0.001', 'EVT_EL_alpha0.001',
-                     NULL))
+# store_filename = paste0("simulation_PZC_EVT_22k.csv")
+# save_PZC_EVT_frame(my_data, store_filename = store_filename,
+#                    select_names = c(
+#                      'dates', 'y', 'df_inv', 'VaRtrue_alpha0.05',
+#                      'VaRtrue_alpha0.001', 'ELtrue_alpha0.001',
+#                      'PZC_VaR0Neld_alpha0.001', 'PZC_EL0Neld_alpha0.001',
+#                      'EVT_tau',
+#                      # 'EVT_ft', 'EVT_bandL', 'EVT_bandU',
+#                      'EVT_VaR_alpha0.001', 'EVT_EL_alpha0.001',
+#                      NULL),
+#                    new_names = c(
+#                      'dates', 'y', 'df_inv', 'tau_true',
+#                      'VaRtrue_alpha0.001', 'ELtrue_alpha0.001',
+#                      'PZC_VaR_alpha0.001', 'PZC_EL_alpha0.001',
+#                      'EVT_tau',
+#                      # 'EVT_ft', 'EVT_bandL', 'EVT_bandU',
+#                      'EVT_VaR_alpha0.001', 'EVT_EL_alpha0.001',
+#                      NULL))
 
