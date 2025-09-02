@@ -516,26 +516,28 @@ print_NZ_table = function(in_sample_data, out_of_sample_data,
     paste0("IN-SAMPLE RESULTS (", alpha_extreme, ",", asset_name, ")"),
     "=========================================",
     capture.output(round(NZ_table(
-      my_data, data_name = "y", evaluation_idx = out_of_sample_idx,
-      VaR_names = c('EVT_VaR', 'PZC_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
-      ES_names = c('EVT_ES', 'PZC_ES', 'GARCH_ES', 'GARCHt_ES'),
+      my_data, data_name = "y", 
+      ## IMPORTANT: THE OUT-OF-SAMPLE INDEX SHOULD BE THE FULL IN-SAMPLE
+      ##            YOU WANT TO EVALUATE
+      evaluation_idx = out_of_sample_idx,
+      VaR_names = c('EVT_VaR', 'PZC_VaR', 'TVGPD_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
+      ES_names = c('EVT_ES', 'PZC_ES', 'TVGPD_ES', 'GARCH_ES', 'GARCHt_ES'),
       alphas = 1 - alpha_extreme, 
-      method_names = c("EVT", "PZC", "GARCH", "GARCHt")),3)),
+      method_names = c("EVT", "PZC", "TVGPD", "GARCH", "GARCHt")),3)),
     "=========================================",
     paste0("OUT-OF-SAMPLE RESULTS (", alpha_extreme, ",", asset_name, ")"),
     "=========================================",
     paste0(asset_name, " NZ Results (tau alpha = ", alpha_tail, ")"),
     capture.output(round(NZ_table(
       my_data_oos, data_name = "y", 
-      VaR_names = c('EVT_VaR', 'PZC_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
-      ES_names = c('EVT_ES', 'PZC_ES', 'GARCH_ES', 'GARCHt_ES'),
+      VaR_names = c('EVT_VaR', 'PZC_VaR', 'TVGPD_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
+      ES_names = c('EVT_ES', 'PZC_ES', 'TVGPD_ES', 'GARCH_ES', 'GARCHt_ES'),
       alphas = 1 - alpha_extreme, 
-      method_names = c("EVT", "PZC", "GARCH", "GARCHt")),3))
+      method_names = c("EVT", "PZC", "TVGPD", "GARCH", "GARCHt")),3))
   )
   out_print = paste(NZ_table_in, out_print, sep = NZ_table_sep)
   if(with_print) writeLines(out_print)
   return(out_print)
 }
-
 
 
