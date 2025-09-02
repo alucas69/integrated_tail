@@ -18,11 +18,13 @@ library(Rcpp)
 library(RcppArmadillo)
 library(forecast)
 require(readxl)
+require(writexl)
 library(lubridate)
 library(rugarch)
 
 source('PZC_simulation_aid.R')
 source('Integrated_EVT_filter.R')
+source('TVGPD_filter.R')
 sourceCpp('PZC_simulation.cpp')
 sourceCpp('Integrated_EVT_filter.cpp')
 
@@ -36,7 +38,7 @@ verbosity_level = 0
 NZ_table_out = total_table = NULL
 ## IMPORTANT: the alpha loop should be inside the asset loop, as the GARCH 
 ##            is NOT re-estimated for different alphas
-alphas = 0.1/c(1,2,4); for (asset_name in c("RUB")) { NZ_table_out = NULL; GARCH_estimated = FALSE; for (alpha_tail in alphas) {alpha_extreme = alpha_tail / 10
+alphas = 0.1/c(1,2,4); for (asset_name in c("XRP", "BTC", "ETH")) { NZ_table_out = NULL; GARCH_estimated = FALSE; for (alpha_tail in alphas) {alpha_extreme = alpha_tail / 10
 # alphas = 0.1/c(1,2,4); for (asset_name in c("EUR", "RUB", "BTC", "ETH")) { NZ_table_out = NULL; GARCH_estimated = FALSE; for (alpha_tail in alphas) {alpha_extreme = alpha_tail / 10
 # alpha_tail = 0.025
 # alpha_extreme = alpha_extremes = 0.0025
@@ -80,6 +82,16 @@ s_EVT_OPTIONS = list(
 )
 
 
+##################################
+## set model configurations TVGPD
+##################################
+s_TVGPD_OPTIONS = list(
+  TAU_TAIL_PCT = alpha_tail, # double, tail percentage for the thresholds tau
+  ALPHA_EXTREME = alpha_extreme, # double, tail percentage for the thresholds tau
+  EXTERNAL_TAU = NULL        # can be overwritten if external thresholds available
+)
+
+
 #############################
 ## Read data
 #############################
@@ -106,24 +118,12 @@ if (asset_name == "EUR") {
     "1999-01-04", paste0(2011 + 1:14, "-12-31"),
     "1999-01-04", paste0(2012 + 1:14, "-12-31")
   )
-} else if (asset_name == "BTC") {
-  ## BTCUSD
+} else if (asset_name %in% c("BTC", "ETH", "XRP")) {
+  ## CRYPTO-USD
   flip_left_to_right = TRUE
-  my_data = read_empirical_data('../../Data/updated data/Bitfinex_BTCUSD_1h.csv', 
+  my_data = read_empirical_data(paste0('../../Data/updated data/Bitfinex_', asset_name, 'USD_1h.csv'), 
                                 price_column_name = "close", date_column_name = "date",
                                 prices_are_already_returns = FALSE, reverse = TRUE, 
-                                date_POSX_format = "%Y-%m-%d %H:%M:%S", tz = "UTC",
-                                flip_return = flip_left_to_right)
-  estimation_evaluation_dates = cbind(
-    "2018-01-05", paste0(2020 + 1:5, "-12-31"),
-    "2018-01-05", paste0(2021 + 1:5, "-12-31")
-  )
-} else if (asset_name == "ETH") {
-  ## ETHUSD
-  flip_left_to_right = TRUE
-  my_data = read_empirical_data('../../Data/updated data/Bitfinex_ETHUSD_1h.csv', 
-                                price_column_name = "close", date_column_name = "date",
-                                prices_are_already_returns = FALSE, reverse = TRUE,
                                 date_POSX_format = "%Y-%m-%d %H:%M:%S", tz = "UTC",
                                 flip_return = flip_left_to_right)
   estimation_evaluation_dates = cbind(
@@ -188,6 +188,19 @@ for (sample_count in 1:nrow(estimation_evaluation_dates)) {
   
   
   ###############################################
+  ## estimate TVGPD specification for extreme 
+  ## alpha using PZC taus
+  ###############################################
+  s_TVGPD_OPTIONS$EXTERNAL_TAU = my_data$EVT_tau
+  my_data = TVGPD_optimize(my_data, TVGPD_OPTIONS = s_TVGPD_OPTIONS, 
+                           PZC_OPTIONS = s_PZC_OPTIONS, verbosity = 0,
+                           in_sample_idx = in_sample_idx,
+                           out_of_sample_idx = out_of_sample_idx)
+
+  
+  
+  
+  ###############################################
   ## estimate GARCH specifications for extreme
   ## alpha
   ###############################################
@@ -211,7 +224,14 @@ for (sample_count in 1:nrow(estimation_evaluation_dates)) {
     my_data_oos[ aid_idx, ] = my_data[aid_idx, ]
     for (nm in names(my_data)) my_data_oos[ aid_idx, nm] = my_data[aid_idx, nm]
   }
+  
 }
+
+###############################################
+## store file with IS and OOS filter values
+###############################################
+writexl::write_xlsx(my_data, path = paste0("results/", asset_name, " IS ", alpha_extreme, ".xlsx"))
+writexl::write_xlsx(my_data_oos, path = paste0("results/", asset_name, " OOS ", alpha_extreme, ".xlsx"))
 
 
 ###############################################
@@ -223,9 +243,9 @@ if (max(in_sample_idx - 1:nrow(my_data)) < 1e-4) {
   gg =
     ggplot(
       data = data.frame(
-        x = rep(my_data$dates, 5),
-        y = flip_back_to_left * c(my_data$PZC_VaR, my_data$EVT_VaR, my_data$EVT_tau, my_data$GARCH_VaR, my_data$GARCHt_VaR),
-        VaR = rep(c("PZC", "EVT", "tau", "GARCH", "GARCHt"), each = nrow(my_data))
+        x = rep(my_data$dates, 6),
+        y = flip_back_to_left * c(my_data$PZC_VaR, my_data$EVT_VaR, my_data$EVT_tau, my_data$TVGPD_VaR, my_data$GARCH_VaR, my_data$GARCHt_VaR),
+        VaR = rep(c("PZC", "EVT", "tau", "TVGPD", "GARCH", "GARCHt"), each = nrow(my_data))
       ),
       aes(x = x, y = y, color = VaR)
     ) +
@@ -236,9 +256,9 @@ if (max(in_sample_idx - 1:nrow(my_data)) < 1e-4) {
   gg =
     ggplot(
       data = data.frame(
-        x = rep(my_data$dates, 4),
-        y = flip_back_to_left * c(my_data$PZC_ES, my_data$EVT_ES, my_data$GARCH_ES, my_data$GARCHt_VaR),
-        ES = rep(c("PZC", "EVT", "GARCH", "GARCHt"), each = nrow(my_data))
+        x = rep(my_data$dates, 5),
+        y = flip_back_to_left * c(my_data$PZC_ES, my_data$EVT_ES, my_data$TVGPD_ES,  my_data$GARCH_ES, my_data$GARCHt_VaR),
+        ES = rep(c("PZC", "EVT", "TVGPD", "GARCH", "GARCHt"), each = nrow(my_data))
       ),
       aes(x = x, y = y, color = ES)
     ) +
@@ -257,7 +277,6 @@ if (max(in_sample_idx - 1:nrow(my_data)) < 1e-4) {
     ) +
     geom_line()
   plot(gg)
-  ## plot ft plus band
 }
 
 
@@ -267,8 +286,15 @@ if (max(in_sample_idx - 1:nrow(my_data)) < 1e-4) {
 NZ_table_out = print_NZ_table(in_sample_data, out_of_sample_data, alpha_extreme, 
                               asset_name, NZ_table_in = NZ_table_out, 
                               with_print = (alpha_tail == alphas[length(alphas)]))
-if (alpha_tail == alphas[length(alphas)]) total_table = c(total_table, rep('', 3), NZ_table_out)
+if (alpha_tail == alphas[length(alphas)]) {
+  outfile = file(paste0("results/", asset_name, alpha_extreme, ".txt"), "w"); writeLines(total_table, con = outfile); close(outfile)
+  total_table = c(total_table, rep('', 3), NZ_table_out)
+}
 
 }}
 
+###############################################
+## print the total result and write to file
+###############################################
 writeLines(total_table)
+outfile = file(paste0("results/total_result.txt"), "w"); writeLines(total_table, con = outfile); close(outfile)
