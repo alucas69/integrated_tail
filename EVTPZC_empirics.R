@@ -287,7 +287,7 @@ NZ_table_out = print_NZ_table(in_sample_data, out_of_sample_data, alpha_extreme,
                               asset_name, NZ_table_in = NZ_table_out, 
                               with_print = (alpha_tail == alphas[length(alphas)]))
 if (alpha_tail == alphas[length(alphas)]) {
-  outfile = file(paste0("results/", asset_name, alpha_extreme, ".txt"), "w"); writeLines(total_table, con = outfile); close(outfile)
+  outfile = file(paste0("results/", asset_name, alpha_extreme, ".txt"), "w"); writeLines(NZ_table_out, con = outfile); close(outfile)
   total_table = c(total_table, rep('', 3), NZ_table_out)
 }
 
