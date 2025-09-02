@@ -130,6 +130,13 @@ if (asset_name == "EUR") {
     "2018-01-05", paste0(2020 + 1:5, "-12-31"),
     "2018-01-05", paste0(2021 + 1:5, "-12-31")
   )
+  ## remove all days with less then x hours of trading data
+  limit_hour = 24
+  aid_idx = tapply(my_data$y, as.Date(my_data$dates), length)
+  aid_idx = aid_idx[which(aid_idx < limit_hour)]
+  my_data = my_data[ !(as.Date(my_data$dates) %in% as.Date(names(aid_idx))), ]
+  print(paste0("Removed ", length(aid_idx), " days from ", asset_name, " due to incomplete day obs"))
+  print(paste0("Total absent days: ", sum(!((as.Date(as.Date(my_data$dates[1]):as.Date(tail(my_data$dates,1)))) %in% unique(as.Date(my_data$dates))))))
 } else {
   error(paste0("ERROR: WRONG ASSET NAME ", asset_name))
 }
