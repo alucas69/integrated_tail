@@ -438,6 +438,7 @@ read_empirical_data = function(filename, price_column_name, date_column_name,
 
 GARCH_optimizer = function(
     my_data,
+    alpha_extreme,
     verbosity = 0,
     in_sample_idx = NULL,
     out_of_sample_idx = NULL,
@@ -492,10 +493,11 @@ GARCH_optimizer = function(
   )
   fit_garch <- ugarchfilter(spec=spec_garch, data=my_data$y[out_of_sample_idx])
   nu = coef(fit_garch)["shape"]
-  my_data[out_of_sample_idx, "GARCHt_VaR"] = coef(fit_garch)["mu"] - qt(alpha_extreme, df = nu) * sigma(fit_garch)
+  adjust_t = sqrt(1 - 2 / nu)
+  my_data[out_of_sample_idx, "GARCHt_VaR"] = coef(fit_garch)["mu"] - qt(alpha_extreme, df = nu) * sigma(fit_garch) * adjust_t
   my_data[out_of_sample_idx, "GARCHt_ES"] = coef(fit_garch)["mu"] + (
     dt(qt(alpha_extreme, df = nu), df = nu) / alpha_extreme * (nu + (qt(alpha_extreme, df = nu))^2) / (nu - 1)
-  ) * sigma(fit_garch)
+  ) * sigma(fit_garch) * adjust_t
   
   return(list(
     my_data = my_data,
@@ -508,7 +510,8 @@ GARCH_optimizer = function(
 
 
 
-print_NZ_table = function(in_sample_data, out_of_sample_data,
+print_NZ_table = function(my_data, my_data_oos, 
+                          in_sample_data, out_of_sample_data,
                           alpha_extreme, asset_name, with_print = TRUE,
                           NZ_table_in = NULL, NZ_table_sep = "  ---  ") {
   out_print = c(
@@ -523,18 +526,23 @@ print_NZ_table = function(in_sample_data, out_of_sample_data,
       VaR_names = c('EVT_VaR', 'PZC_VaR', 'TVGPD_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
       ES_names = c('EVT_ES', 'PZC_ES', 'TVGPD_ES', 'GARCH_ES', 'GARCHt_ES'),
       alphas = 1 - alpha_extreme, 
-      method_names = c("EVT", "PZC", "TVGPD", "GARCH", "GARCHt")),3)),
-    "=========================================",
-    paste0("OUT-OF-SAMPLE RESULTS (", alpha_extreme, ",", asset_name, ")"),
-    "=========================================",
-    paste0(asset_name, " NZ Results (tau alpha = ", alpha_tail, ")"),
-    capture.output(round(NZ_table(
-      my_data_oos, data_name = "y", 
-      VaR_names = c('EVT_VaR', 'PZC_VaR', 'TVGPD_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
-      ES_names = c('EVT_ES', 'PZC_ES', 'TVGPD_ES', 'GARCH_ES', 'GARCHt_ES'),
-      alphas = 1 - alpha_extreme, 
       method_names = c("EVT", "PZC", "TVGPD", "GARCH", "GARCHt")),3))
   )
+  if (!is.null(my_data_oos)) {
+    out_print = c(
+      out_print,
+      "=========================================",
+      paste0("OUT-OF-SAMPLE RESULTS (", alpha_extreme, ",", asset_name, ")"),
+      "=========================================",
+      paste0(asset_name, " NZ Results (tau alpha = ", alpha_tail, ")"),
+      capture.output(round(NZ_table(
+        my_data_oos, data_name = "y", 
+        VaR_names = c('EVT_VaR', 'PZC_VaR', 'TVGPD_VaR', 'GARCH_VaR', 'GARCHt_VaR'), 
+        ES_names = c('EVT_ES', 'PZC_ES', 'TVGPD_ES', 'GARCH_ES', 'GARCHt_ES'),
+        alphas = 1 - alpha_extreme, 
+        method_names = c("EVT", "PZC", "TVGPD", "GARCH", "GARCHt")),3))
+    )
+  }
   out_print = paste(NZ_table_in, out_print, sep = NZ_table_sep)
   if(with_print) writeLines(out_print)
   return(out_print)
