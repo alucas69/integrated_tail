@@ -163,7 +163,10 @@ TVGPD_estimate_full_model <- function(
   my_data[out_of_sample_idx, "TVGPD_ES"] = (my_data$TVGPD_VaR[out_of_sample_idx] + my_data$TVGPD_delta[out_of_sample_idx] - my_data$TVGPD_xi[out_of_sample_idx] * my_data$TVGPD_tau[out_of_sample_idx]) / (1 - my_data$TVGPD_xi[out_of_sample_idx])
   my_data[which( my_data$TVGPD_xi[out_of_sample_idx] >= 1), "TVGPD_ES"] = NA  ## remove non-existent ES
 
-  return(my_data)
+  return(list(
+    my_data = my_data,
+    tail.optimizer.output = tail.out
+  ))
 }
 
 
