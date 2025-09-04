@@ -300,6 +300,7 @@ simulate_filter_bands <- function(x, POTdata, covmatrix, f1, nrsims = 100, pct =
     } else {
       skipped = skipped + c(par_in['omega'] <= 0, par_in['alpha'] <= 0)
     }
+
   }
   if (verbosity > 0) cat('\nDiscarded (omega,alpha) = (', paste0(round(100 * skipped / nrsims), collapse = ' % , '), '%) band simulations\n')
   
@@ -409,15 +410,19 @@ estimate_full_model <- function(my_data, smoothings = c(5,20,-1),
   if (verbosity >= 1) cat('\nFinal parameters:\n', par.trafo.tailindex(tail.out$par, EVT_OPTIONS))
   
   ## estimate the tail index path and simulated confidence band
-  par.t = par.trafo.tailindex(tail.out$par, EVT_OPTIONS)
+  tail.out$par.t = par.t = par.trafo.tailindex(tail.out$par, EVT_OPTIONS)
   omega = par.t['omega']; alpha = par.t['alpha']
   tail.index = tail.filter(POTdata_oos, omega, 1, alpha, f1.quick)
   covmatrices = compute_std_err(tail.out$par, POTdata_is, f1.quick, EVT_OPTIONS)
-  simulations = simulate_filter_bands(tail.out$par, POTdata_oos, covmatrices, f1.quick, nrsims = nrsims, pct = pct, raw = raw.sim, EVT_OPTIONS = EVT_OPTIONS, verbosity = verbosity)
 
   my_data[out_of_sample_idx, "EVT_ft"] = tail.index$f_out[POTdates_idx_oos]
-  my_data[out_of_sample_idx, "EVT_bandL"] = simulations$bands[POTdates_idx_oos, 1]
-  my_data[out_of_sample_idx, "EVT_bandU"] = simulations$bands[POTdates_idx_oos, 2]
+  if (EVT_OPTIONS$BANDS_NRSIMS > 0) {
+    simulations = simulate_filter_bands(tail.out$par, POTdata_oos, covmatrices, f1.quick, nrsims = nrsims, pct = pct, raw = raw.sim, EVT_OPTIONS = EVT_OPTIONS, verbosity = verbosity)
+    my_data[out_of_sample_idx, "EVT_bandL"] = simulations$bands[POTdates_idx_oos, 1]
+    my_data[out_of_sample_idx, "EVT_bandU"] = simulations$bands[POTdates_idx_oos, 2]
+  } else {
+    my_data[out_of_sample_idx, "EVT_bandL"] = my_data[out_of_sample_idx, "EVT_bandU"] = my_data[out_of_sample_idx, "EVT_ft"]
+  }
   ## compute our VaR and EL and the true VaR
   my_data[out_of_sample_idx, "EVT_VaR"] = my_data$EVT_tau[out_of_sample_idx] * ( (EVT_OPTIONS$ALPHA_EXTREME / EVT_OPTIONS$TAU_TAIL_PCT) ^ -my_data$EVT_ft[out_of_sample_idx])
   my_data[out_of_sample_idx, "EVT_ES"] = my_data$EVT_VaR[out_of_sample_idx] / (1 - my_data$EVT_ft[out_of_sample_idx])
@@ -523,4 +528,5 @@ EVT_PZC_plot <- function(my_data, alpha_extreme, sub_idx = NULL) {
   gg = ggarrange(g1, g1s, g2, g2s, nrow = 2, ncol = 2, common.legend = TRUE)
   plot(gg)
 }
+
 
