@@ -8,6 +8,7 @@ library(RcppArmadillo)
 library(foreach)
 library(doParallel)
 library(doRNG)
+library(utils)
 nr_free_cores = max(1, detectCores() - 1)
 registerDoParallel(cores = nr_free_cores)
 
@@ -68,6 +69,22 @@ for (i0 in 1:dim_S) {
   df_sim[i0, paste0('alpha(T=',10*dim_T,')')] = aid1[1, 'alpha']
   df_sim[i0, paste0('logomega(T=',10*dim_T,')')] = aid1[1, 'logomega']
   df_sim[i0, paste0('llik(T=',10*dim_T,')')] = aid1[1, 'llik']
+  
+  if (i0 %% 100 == 0) {
+    nr_bins = ceiling(dim_S^0.5)
+    df_plot = data.frame(
+      alpha = df_sim[,paste0('alpha(T=', 10*dim_T, ')')],
+      logomega = df_sim[,paste0('logomega(T=', 10*dim_T, ')')],
+      llik = df_sim[,paste0('llik(T=', 10*dim_T, ')')]
+    )[1:i0, ]
+    gg1 = ggplot(data = df_plot, aes(x=logomega)) + geom_histogram(aes(y=after_stat(density)), bins=nr_bins) + geom_density()
+    gg2 = ggplot(data = df_plot, aes(x=alpha)) + geom_histogram(aes(y=after_stat(density)), bins=nr_bins) + geom_density()
+    gg3 = ggplot(data = df_plot, aes(x=alpha, y=logomega)) + geom_jitter()
+    gg = list(3); gg[[1]]=gg1; gg[[2]]=gg2; gg[[3]]=gg3; 
+    plot(ggarrange(plotlist=gg,ncol=2,nrow=2))
+    
+    print(paste0('T=', 10*dim_T, '; % at lower bound: ', 100 * length(which(df_plot[,'logomega'] < min(df_plot[,'logomega'] + 0.1)))/nrow(df_plot), '%'))
+  }
 }
 
 nr_bins = ceiling(dim_S^0.5)
@@ -83,3 +100,10 @@ gg = list(3); gg[[1]]=gg1; gg[[2]]=gg2; gg[[3]]=gg3;
 plot(ggarrange(plotlist=gg,ncol=2,nrow=2))
 
 print(paste0('T=', 10*dim_T, '; % at lower bound: ', 100 * length(which(df_plot[,'logomega'] < min(df_plot[,'logomega'] + 0.1)))/nrow(df_plot), '%'))
+
+save_file = 'profile_results.Rds'
+if (file.exists(save_file)) {
+  answer = menu(c('Yes','No'), title = paste0('"', save_file, '" exists: overwrite?'))
+  if (answer == 1) save(df_sim, file = save_file)
+}
+
